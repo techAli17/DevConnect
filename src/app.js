@@ -5,15 +5,37 @@ const User = require("./models/user");
 
 app.use(express.json());
 
+// signup for user
 app.post("/signup", async (req, res) => {
   console.log(req.body);
+  const data = req.body;
+
+  const ALLOWED_UPDATES = [
+    "photoUrl",
+    "about",
+    "gender",
+    "age",
+    "skills",
+    "phoneNumber",
+    "lastName",
+    "firstName",
+    "password",
+    "email",
+  ];
 
   try {
+    const updateAllowedForTheseKeys = Object.keys(data).every((key) =>
+      ALLOWED_UPDATES.includes(key)
+    );
+
+    if (!updateAllowedForTheseKeys) {
+      throw new Error("Update not allowed");
+    }
     const user = new User(req.body);
     await user.save();
     res.send("User added successfully to Db");
   } catch (error) {
-    res.status(400).send("Error saving the use" + error.message);
+    res.status(400).send("Error saving the user: " + error.message);
   }
 });
 
@@ -49,6 +71,56 @@ app.get("/getFeed", async (req, res) => {
     res.send(userFound);
   } catch (error) {
     res.status(400).send("something went wrong");
+  }
+});
+
+// delete user by Id
+app.delete("/deleteUserById", async (req, res) => {
+  const userId = req.body.userId;
+  try {
+    const userFound = await User.findByIdAndDelete(userId);
+    console.log("userFound", userFound);
+
+    res.send("User Deleted successfully");
+  } catch (error) {
+    res.send("something went wrong");
+  }
+});
+
+//update user
+app.patch("/updateUserById/:userId", async (req, res) => {
+  const userId = req.params?.userId;
+  const data = req.body;
+
+  const ALLOWED_UPDATES = [
+    "photoUrl",
+    "about",
+    "gender",
+    "age",
+    "skills",
+    "phoneNumber",
+    "lastName",
+    "firstName",
+    "password",
+  ];
+
+  try {
+    const updateAllowedForTheseKeys = Object.keys(data).every((key) =>
+      ALLOWED_UPDATES.includes(key)
+    );
+
+    if (!updateAllowedForTheseKeys) {
+      throw new Error("Update not allowed");
+    }
+    const userFound = await User.findByIdAndUpdate(userId, data, {
+      returnDocument: "after", // return after __id value
+      runValidators: true, // this is for when you make custom validators in your models then only you able to update by default custom validator not run
+    });
+    console.log("userFound", userFound);
+
+    res.send("User updated successfully");
+  } catch (error) {
+    res.status(400).send("Update fail:   " + error.message);
   }
 });
 
