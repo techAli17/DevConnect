@@ -1,6 +1,9 @@
+require("dotenv").config();
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const validator = require("validator");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
 const userSchema = new Schema(
   {
@@ -23,7 +26,6 @@ const userSchema = new Schema(
       type: String,
       required: [true, "Password is required"],
       minLength: [6, "Password must be at least 6 characters"],
-      maxLength: [20, "Password cannot exceed 20 characters"],
       validate: {
         validator: function (val) {
           return validator.isStrongPassword(val, {
@@ -86,6 +88,22 @@ const userSchema = new Schema(
   },
   { timestamps: true }
 );
+
+userSchema.methods.getJWT = async function () {
+  const user = this;
+  const token = await jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
+    expiresIn: "7d",
+  });
+  return token;
+};
+
+userSchema.methods.validatePassword = async function (passwordInputByUser) {
+  const user = this;
+  const passwordHash = user.password;
+
+  const isPasswordValid = await bcrypt.compare(passwordInputByUser, passwordHash);
+  return isPasswordValid;
+};
 
 //model name must be start from capital letter is good practice
 const User = mongoose.model("User", userSchema);

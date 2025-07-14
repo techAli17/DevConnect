@@ -1,37 +1,37 @@
 const connectDB = require("./config/dataBase");
 const express = require("express");
 const app = express();
+
+require("dotenv").config();
+const bcrypt = require("bcrypt");
 const User = require("./models/user");
+const cookieParser = require("cookie-parser");
+const validateSignUpData = require("./utils/validation");
+const { userAuth } = require("./middlewares/authMiddleware");
 
 app.use(express.json());
+app.use(cookieParser());
 
 // signup for user
 app.post("/signup", async (req, res) => {
-  console.log(req.body);
-  const data = req.body;
-
-  const ALLOWED_UPDATES = [
-    "photoUrl",
-    "about",
-    "gender",
-    "age",
-    "skills",
-    "phoneNumber",
-    "lastName",
-    "firstName",
-    "password",
-    "email",
-  ];
-
   try {
-    const updateAllowedForTheseKeys = Object.keys(data).every((key) =>
-      ALLOWED_UPDATES.includes(key)
-    );
+    // validation of data
+    validateSignUpData(req);
 
-    if (!updateAllowedForTheseKeys) {
-      throw new Error("Update not allowed");
-    }
-    const user = new User(req.body);
+    const { password, firstName, lastName, email, phoneNumber } = req.body;
+
+    // Encrypt password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // create new instance of user model
+    const user = new User({
+      firstName,
+      lastName,
+      email,
+      phoneNumber,
+      password: passwordHash,
+    });
+
     await user.save();
     res.send("User added successfully to Db");
   } catch (error) {
@@ -39,91 +39,61 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-//get the user from email
-app.get("/getUserFromEmail", async (req, res) => {
-  const userEmail = req.body.email;
-
-  //try multiple method to find user , by id or etc
-
-  // findOne method returns first matched id and its object not array
-  // try {
-  //   const userFound = await User.findOne({ email: userEmail });
-  //   if (!userFound) res.status(404).send("user not found with email" + userEmail);
-  //   res.send(userFound);
-  // } catch (error) {
-  //   res.status(400).send("something went wrong");
-  // }
-
+// login for user
+app.post("/login", async (req, res) => {
   try {
-    const userFound = await User.find({ email: userEmail });
-    if (userFound.length === 0) res.status(404).send("user not found with email" + userEmail);
-    res.send(userFound);
-  } catch (error) {
-    res.status(400).send("something went wrong");
-  }
-});
+    const { password, email } = req.body;
 
-//get the feed to app
-app.get("/getFeed", async (req, res) => {
-  try {
-    const userFound = await User.find({});
-    if (userFound.length === 0) res.status(404).send("users not found");
-    res.send(userFound);
-  } catch (error) {
-    res.status(400).send("something went wrong");
-  }
-});
-
-// delete user by Id
-app.delete("/deleteUserById", async (req, res) => {
-  const userId = req.body.userId;
-  try {
-    const userFound = await User.findByIdAndDelete(userId);
-    console.log("userFound", userFound);
-
-    res.send("User Deleted successfully");
-  } catch (error) {
-    res.send("something went wrong");
-  }
-});
-
-//update user
-app.patch("/updateUserById/:userId", async (req, res) => {
-  const userId = req.params?.userId;
-  const data = req.body;
-
-  const ALLOWED_UPDATES = [
-    "photoUrl",
-    "about",
-    "gender",
-    "age",
-    "skills",
-    "phoneNumber",
-    "lastName",
-    "firstName",
-    "password",
-  ];
-
-  try {
-    const updateAllowedForTheseKeys = Object.keys(data).every((key) =>
-      ALLOWED_UPDATES.includes(key)
-    );
-
-    if (!updateAllowedForTheseKeys) {
-      throw new Error("Update not allowed");
+    if (!email || !password) {
+      return res.status(400).send("Email and password are required");
     }
-    const userFound = await User.findByIdAndUpdate(userId, data, {
-      returnDocument: "after", // return after __id value
-      runValidators: true, // this is for when you make custom validators in your models then only you able to update by default custom validator not run
-    });
-    console.log("userFound", userFound);
 
-    res.send("User updated successfully");
+    const user = await User.findOne({ email: email });
+    if (!user) {
+      throw new Error("Invalid credentials!");
+    }
+    // decrypt password
+    const isPasswordValid = await user.validatePassword(password);
+    if (isPasswordValid) {
+      // create Jwt
+      const token = await user.getJWT();
+
+      // send back jwt to user
+      res.cookie("token", token, {
+        expires: new Date(Date.now() + 8 * 3600000),
+      });
+
+      //return response
+      res.status(200).json({ message: "Login successful", token });
+    } else {
+      throw new Error("Invalid credentials");
+    }
   } catch (error) {
-    res.status(400).send("Update fail:   " + error.message);
+    res.status(400).send("Error while login: " + error.message);
   }
 });
 
+//get user profile
+app.get("/profile", userAuth, async (req, res) => {
+  try {
+    const userFound = req.user;
+    res.send(userFound);
+  } catch (error) {
+    res.status(400).send("something went wrong: " + error.message);
+  }
+});
+
+//send connection request
+app.post("/sendConnectionRequest", userAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    res.send(user.firstName + "sent connection successfully!");
+  } catch (error) {
+    res.status(400).send("something went wrong: " + error.message);
+  }
+});
+
+//Database connection
 connectDB()
   .then(() => {
     console.log("Database connection established!");
