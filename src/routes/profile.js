@@ -41,6 +41,8 @@ profileRouter.patch("/profile/edit", userAuth, async (req, res) => {
 //forgot password
 profileRouter.patch("/profile/forgotPassword", userAuth, async (req, res) => {
   try {
+    // you can also write data sanitization like  if (!validateProfileEditData(req))
+
     const userFound = req.user;
 
     const { newPassword } = req.body;
