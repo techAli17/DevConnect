@@ -12,10 +12,12 @@ const userSchema = new Schema(
       required: true,
       minLength: 3,
       maxLength: 50,
+      index: true,
     },
     email: {
       type: String,
       trim: true,
+      index: true,
       lowercase: true,
       unique: true,
       required: [true, "Email is required"],
@@ -88,6 +90,10 @@ const userSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Compound index to optimize queries involving both fromUserId and toUserId.
+// This improves performance when checking for existing connection requests between two users.
+// userSchema.index({ firstName: 1, lastName: 1 });
 
 userSchema.methods.getJWT = async function () {
   const user = this;
