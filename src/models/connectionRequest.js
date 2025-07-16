@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { type } = require("os");
 
 const connectionRequestSchema = new mongoose.Schema(
   {
@@ -17,6 +18,12 @@ const connectionRequestSchema = new mongoose.Schema(
         values: ["interested", "rejected", "accepted", "ignored"],
         message: `{VALUE} is incorrect status type`,
       },
+    },
+    senderName: {
+      type: String,
+    },
+    receiverName: {
+      type: String,
     },
   },
   {

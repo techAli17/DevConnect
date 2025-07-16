@@ -52,6 +52,8 @@ requestRouter.post("/request/send/:status/:toUserId", userAuth, async (req, res)
       fromUserId,
       toUserId,
       status,
+      senderName: loggedInUser.firstName + " " + loggedInUser.lastName,
+      receiverName: isToUserIDExists.firstName + " " + isToUserIDExists.lastName,
     });
 
     const data = await connectionRequest.save();
@@ -69,6 +71,82 @@ requestRouter.post("/request/send/:status/:toUserId", userAuth, async (req, res)
       },
       status,
       data,
+    });
+  } catch (error) {
+    res.status(400).send("Error: " + error.message);
+  }
+});
+
+// Review connection request
+requestRouter.post("/request/review/:status/:requestId", userAuth, async (req, res) => {
+  try {
+    const loggedInUser = req.user;
+    const { status, requestId } = req.params;
+
+    // Validate status
+    if (!["accepted", "rejected"].includes(status)) {
+      throw new Error(`Invalid status '${status}' — must be either 'accepted' or 'rejected'.`);
+    }
+
+    // Validate requestId is a valid Mongo ObjectId
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      throw new Error("Invalid connection request ID.");
+    }
+
+    // Check if the connection request exists at all
+    const requestExists = await ConnectionRequestModel.findById(requestId);
+    if (!requestExists) {
+      throw new Error("Connection request not found.");
+    }
+
+    // Check if the request was meant for this user
+    if (!requestExists.toUserId.equals(loggedInUser._id)) {
+      throw new Error("You are not authorized to review this request.");
+    }
+
+    // Check if the request is still in 'interested' state
+    if (requestExists.status !== "interested") {
+      throw new Error(`Request has already been reviewed as '${requestExists.status}'.`);
+    }
+    // Find the request that is addressed to the logged-in user and is still 'interested'
+    const connectionRequest = await ConnectionRequestModel.findOne({
+      _id: requestId,
+      toUserId: loggedInUser._id,
+      status: "interested",
+    });
+
+    if (!connectionRequest) {
+      throw new Error("The request is either invalid or has already been reviewed.");
+    }
+
+    // Fetch sender user info for response message
+    const senderUser = await User.findById(connectionRequest.fromUserId);
+    if (!senderUser) {
+      throw new Error("Sender user not found.");
+    }
+
+    // Update status and log timestamp
+    connectionRequest.status = status;
+    connectionRequest.reviewedAt = new Date();
+
+    const data = await connectionRequest.save();
+
+    res.json({
+      message: `You have successfully ${status} the connection request from ${senderUser.firstName}.`,
+      status,
+      data: {
+        requestId: data._id,
+        fromUser: {
+          id: senderUser._id,
+          name: senderUser.firstName,
+        },
+        toUser: {
+          id: loggedInUser._id,
+          name: loggedInUser.firstName,
+        },
+        status: data.status,
+        reviewedAt: data.reviewedAt,
+      },
     });
   } catch (error) {
     res.status(400).send("Error: " + error.message);
